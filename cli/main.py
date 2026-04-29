@@ -1,6 +1,7 @@
 from typing import Optional
 import datetime
 import os
+import sys
 import typer
 from pathlib import Path
 from functools import wraps
@@ -33,6 +34,21 @@ from cli.announcements import fetch_announcements, display_announcements
 from cli.stats_handler import StatsCallbackHandler
 
 console = Console()
+
+
+class _Tee:
+    """Write to multiple streams simultaneously."""
+
+    def __init__(self, *streams):
+        self.streams = streams
+
+    def write(self, data):
+        for s in self.streams:
+            s.write(data)
+
+    def flush(self):
+        for s in self.streams:
+            s.flush()
 
 app = typer.Typer(
     name="TradingAgents",
@@ -998,13 +1014,31 @@ def run_analysis_from_args(
         debug=True,
     )
 
+    # Create result directory for saving reports and logs
+    results_dir = Path(config["results_dir"]) / ticker / date
+    results_dir.mkdir(parents=True, exist_ok=True)
+    log_file = results_dir / "console.log"
+
+    # Tee console output to both terminal and log file
+    log_handle = open(log_file, "w", encoding="utf-8")
+    original_file = console.file
+    console.file = _Tee(original_file, log_handle)
+
     start_time = time.time()
     final_state, decision = graph.propagate(ticker, date)
     elapsed = time.time() - start_time
 
+    # Restore console and close log file
+    console.file = original_file
+    log_handle.close()
+
+    # Save structured reports to disk
+    save_report_to_disk(final_state, ticker, results_dir / "reports")
+
     console.print()
     console.print(f"[bold green]Analysis complete in {elapsed:.1f}s[/bold green]")
     console.print(f"[bold]Decision: {decision}[/bold]")
+    console.print(f"Reports saved to: {report_dir}")
     console.print()
 
     # Display final report summary
