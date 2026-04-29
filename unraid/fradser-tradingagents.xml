@@ -1,0 +1,52 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>TradingAgents</Name>
+  <Repository>fradser/tradingagents:v0.2.4</Repository>
+  <Registry>https://hub.docker.com/r/fradser/tradingagents</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/TauricResearch/TradingAgents/issues</Support>
+  <Project>https://github.com/TauricResearch/TradingAgents</Project>
+  <ReadMe/>
+  <Overview>TradingAgents is a multi-agent LLM financial trading framework. It uses specialized AI agents (analysts, traders, portfolio managers, researchers, and risk managers) to collaborate on trading decisions for stocks.&#13;
+&#13;
+Usage (open Unraid container console):&#13;
+  tradingagents analyze --ticker NVDA&#13;
+  tradingagents analyze -t NVDA -d 2024-05-10 --depth 3&#13;
+  tradingagents analyze -t NVDA -p openai-compatible --backend-url http://host:8080/v1 --deep-model x --quick-model y&#13;
+&#13;
+Without --ticker, runs in interactive mode.&#13;
+&#13;
+At least one LLM provider API key is required (set via environment variables).&#13;
+&#13;
+Data and logs are persisted in /home/appuser/.tradingagents inside the container.&#13;
+&#13;
+GitHub: https://github.com/TauricResearch/TradingAgents</Overview>
+  <Category>Tools: Finance:</Category>
+  <WebUI/>
+  <TemplateURL>https://raw.githubusercontent.com/FradSer/TradingAgents/main/unraid/fradser-tradingagents.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/TauricResearch/TradingAgents/main/assets/TauricResearch.png</Icon>
+  <ExtraParams>--entrypoint sleep infinity</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled>1745793600</DateInstalled>
+  <DonateText/>
+  <DonateLink/>
+  <Requires>Before first deployment, run the following in the Unraid terminal:brbrmkdir -p /mnt/user/appdata/tradingagentsbrchown -R 1000:1000 /mnt/user/appdata/tradingagents</Requires>
+  <Config Name="App Data" Target="/home/appuser/.tradingagents" Default="/mnt/user/appdata/tradingagents" Mode="rw" Description="Persistent data directory for TradingAgents cache, logs, and decision history." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/tradingagents</Config>
+  <Config Name="OpenAI API Key" Target="OPENAI_API_KEY" Default="" Mode="" Description="API key for OpenAI (GPT models). Optional if using another provider." Type="Variable" Display="always" Required="false" Mask="true"/>
+  <Config Name="Anthropic API Key" Target="ANTHROPIC_API_KEY" Default="" Mode="" Description="API key for Anthropic (Claude models). Optional if using another provider." Type="Variable" Display="always" Required="false" Mask="true"/>
+  <Config Name="Google API Key" Target="GOOGLE_API_KEY" Default="" Mode="" Description="API key for Google (Gemini models). Optional if using another provider." Type="Variable" Display="always" Required="false" Mask="true"/>
+  <Config Name="XAI API Key" Target="XAI_API_KEY" Default="" Mode="" Description="API key for xAI (Grok models). Optional if using another provider." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="DeepSeek API Key" Target="DEEPSEEK_API_KEY" Default="" Mode="" Description="API key for DeepSeek models. Optional if using another provider." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="DashScope API Key" Target="DASHSCOPE_API_KEY" Default="" Mode="" Description="API key for Alibaba DashScope (Qwen models). Optional if using another provider." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="ZhiPu API Key" Target="ZHIPU_API_KEY" Default="" Mode="" Description="API key for ZhiPu AI (GLM models). Optional if using another provider." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="OpenRouter API Key" Target="OPENROUTER_API_KEY" Default="" Mode="" Description="API key for OpenRouter (multi-model gateway). Optional if using another provider." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="Alpha Vantage API Key" Target="ALPHA_VANTAGE_API_KEY" Default="" Mode="" Description="API key for Alpha Vantage market data. Optional - yfinance is used by default." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="Default LLM Provider" Target="LLM_PROVIDER" Default="openai" Mode="" Description="Default LLM provider for non-interactive mode. Options: openai, anthropic, google, xai, deepseek, qwen, glm, openrouter, ollama, openai-compatible." Type="Variable" Display="always" Required="false" Mask="false">openai</Config>
+  <Config Name="OpenAI-Compatible Base URL" Target="OPENAI_COMPATIBLE_BASE_URL" Default="" Mode="" Description="Base URL for OpenAI-compatible API (e.g. http://host:8080/v1). Used with the OpenAI-Compatible provider." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Quick Think Model" Target="QUICK_THINK_MODEL" Default="" Mode="" Description="Model ID for quick-thinking agent (e.g. gpt-4o-mini, qwen-turbo). Used with OpenAI-Compatible provider." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Deep Think Model" Target="DEEP_THINK_MODEL" Default="" Mode="" Description="Model ID for deep-thinking agent (e.g. gpt-4o, qwen-plus). Used with OpenAI-Compatible provider." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+</Container>

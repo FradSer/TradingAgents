@@ -1,5 +1,6 @@
 from typing import Optional
 import datetime
+import os
 import typer
 from pathlib import Path
 from functools import wraps
@@ -926,6 +927,94 @@ def format_tool_args(args, max_length=80) -> str:
         return result[:max_length - 3] + "..."
     return result
 
+def run_analysis_from_args(
+    ticker: str,
+    date: str = None,
+    provider: str = None,
+    deep_model: str = None,
+    quick_model: str = None,
+    backend_url: str = None,
+    analysts: str = None,
+    depth: int = None,
+    language: str = None,
+    checkpoint: bool = False,
+):
+    """Run analysis non-interactively from CLI arguments."""
+    config = DEFAULT_CONFIG.copy()
+
+    # Resolve from env vars with fallbacks
+    provider = provider or os.environ.get("LLM_PROVIDER", "openai")
+    deep_model = deep_model or os.environ.get("DEEP_THINK_MODEL") or config["deep_think_llm"]
+    quick_model = quick_model or os.environ.get("QUICK_THINK_MODEL") or config["quick_think_llm"]
+    backend_url = (
+        backend_url
+        or os.environ.get("OPENAI_COMPATIBLE_BASE_URL")
+        or os.environ.get("OPENAI_BASE_URL")
+    )
+    date = date or datetime.datetime.now().strftime("%Y-%m-%d")
+    depth = depth or 1
+    language = language or "English"
+
+    config.update({
+        "llm_provider": provider,
+        "deep_think_llm": deep_model,
+        "quick_think_llm": quick_model,
+        "backend_url": backend_url,
+        "max_debate_rounds": depth,
+        "max_risk_discuss_rounds": depth,
+        "output_language": language,
+        "checkpoint_enabled": checkpoint,
+    })
+
+    # Parse analysts
+    valid_analysts = {"market", "social", "news", "fundamentals"}
+    if analysts:
+        selected_analysts = []
+        for a in analysts.split(","):
+            a = a.strip().lower()
+            if a in valid_analysts:
+                selected_analysts.append(a)
+        if not selected_analysts:
+            selected_analysts = list(valid_analysts)
+    else:
+        selected_analysts = list(valid_analysts)
+
+    console.print(f"[bold green]Running non-interactive analysis...[/bold green]")
+    console.print(f"  Ticker: {ticker}")
+    console.print(f"  Date: {date}")
+    console.print(f"  Provider: {provider}")
+    console.print(f"  Quick model: {quick_model}")
+    console.print(f"  Deep model: {deep_model}")
+    if backend_url:
+        console.print(f"  Backend URL: {backend_url}")
+    console.print(f"  Depth: {depth}")
+    console.print(f"  Language: {language}")
+    console.print()
+
+    graph = TradingAgentsGraph(
+        selected_analysts,
+        config=config,
+        debug=True,
+    )
+
+    start_time = time.time()
+    final_state, decision = graph.propagate(ticker, date)
+    elapsed = time.time() - start_time
+
+    console.print()
+    console.print(f"[bold green]Analysis complete in {elapsed:.1f}s[/bold green]")
+    console.print(f"[bold]Decision: {decision}[/bold]")
+    console.print()
+
+    # Display final report summary
+    if final_state.get("final_trade_decision"):
+        console.print(Panel(
+            final_state["final_trade_decision"],
+            title="Portfolio Manager Decision",
+            border_style="green",
+        ))
+
+
 def run_analysis(checkpoint: bool = False):
     # First get all user selections
     selections = get_user_selections()
@@ -1199,6 +1288,42 @@ def run_analysis(checkpoint: bool = False):
 
 @app.command()
 def analyze(
+    ticker: str = typer.Option(
+        None, "--ticker", "-t",
+        help="Ticker symbol (e.g. NVDA, SPY). Triggers non-interactive mode.",
+    ),
+    date: str = typer.Option(
+        None, "--date", "-d",
+        help="Analysis date (YYYY-MM-DD). Default: today.",
+    ),
+    provider: str = typer.Option(
+        None, "--provider", "-p",
+        help="LLM provider. Default: env LLM_PROVIDER or 'openai'.",
+    ),
+    deep_model: str = typer.Option(
+        None, "--deep-model",
+        help="Deep-thinking model ID. Default: env DEEP_THINK_MODEL.",
+    ),
+    quick_model: str = typer.Option(
+        None, "--quick-model",
+        help="Quick-thinking model ID. Default: env QUICK_THINK_MODEL.",
+    ),
+    backend_url: str = typer.Option(
+        None, "--backend-url",
+        help="Custom API base URL. Default: env OPENAI_COMPATIBLE_BASE_URL.",
+    ),
+    analysts: str = typer.Option(
+        None, "--analysts",
+        help="Comma-separated analyst types: market,social,news,fundamentals. Default: all.",
+    ),
+    depth: int = typer.Option(
+        None, "--depth",
+        help="Research depth: 1=shallow, 3=medium, 5=deep. Default: 1.",
+    ),
+    language: str = typer.Option(
+        None, "--language", "-l",
+        help="Output language. Default: English.",
+    ),
     checkpoint: bool = typer.Option(
         False,
         "--checkpoint",
@@ -1214,7 +1339,24 @@ def analyze(
         from tradingagents.graph.checkpointer import clear_all_checkpoints
         n = clear_all_checkpoints(DEFAULT_CONFIG["data_cache_dir"])
         console.print(f"[yellow]Cleared {n} checkpoint(s).[/yellow]")
-    run_analysis(checkpoint=checkpoint)
+
+    if ticker:
+        # Non-interactive mode
+        run_analysis_from_args(
+            ticker=ticker,
+            date=date,
+            provider=provider,
+            deep_model=deep_model,
+            quick_model=quick_model,
+            backend_url=backend_url,
+            analysts=analysts,
+            depth=depth,
+            language=language,
+            checkpoint=checkpoint,
+        )
+    else:
+        # Interactive mode (existing behavior)
+        run_analysis(checkpoint=checkpoint)
 
 
 if __name__ == "__main__":
