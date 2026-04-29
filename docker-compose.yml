@@ -5,7 +5,7 @@ services:
       - .env
     volumes:
       - tradingagents_data:/home/appuser/.tradingagents
-    entrypoint: ["sleep", "infinity"]
+    command: ["sleep", "infinity"]
 
   ollama:
     image: ollama/ollama:latest
