@@ -1,0 +1,11 @@
+scopes:
+    - name: cli
+      description: command line tools and entrypoints in cli/; excludes trading logic from tradingagents/.
+    - name: results
+      description: runtime data outputs and logs in results/; excludes source code in tradingagents/.
+    - name: scripts
+      description: utility scripts in scripts/; excludes tests and production code.
+    - name: tradingagents
+      description: core trading agents, LLM clients, dataflows, and graph logic in tradingagents/; excludes CLI utilities and tests.
+    - name: unr
+      description: Unraid configuration in unraid/; excludes source code and tests.
