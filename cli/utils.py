@@ -193,6 +193,17 @@ def _select_model(provider: str, mode: str) -> str:
             validate=lambda x: len(x.strip()) > 0 or "Please enter a deployment name.",
         ).ask().strip()
 
+    if provider.lower() == "openai-compatible":
+        import os
+        env_default = os.environ.get(
+            "QUICK_THINK_MODEL" if mode == "quick" else "DEEP_THINK_MODEL", ""
+        )
+        return questionary.text(
+            f"Enter {mode}-thinking model ID:",
+            default=env_default,
+            validate=lambda x: len(x.strip()) > 0 or "Please enter a model ID.",
+        ).ask().strip()
+
     choice = questionary.select(
         f"Select Your [{mode.title()}-Thinking LLM Engine]:",
         choices=[
@@ -242,6 +253,7 @@ def select_llm_provider() -> tuple[str, str | None]:
         ("OpenRouter", "openrouter", "https://openrouter.ai/api/v1"),
         ("Azure OpenAI", "azure", None),
         ("Ollama", "ollama", "http://localhost:11434/v1"),
+        ("OpenAI-Compatible", "openai-compatible", None),
     ]
 
     choice = questionary.select(
@@ -265,6 +277,20 @@ def select_llm_provider() -> tuple[str, str | None]:
         exit(1)
 
     provider, url = choice
+
+    # OpenAI-Compatible: prompt for custom base URL
+    if provider == "openai-compatible":
+        import os
+        default_url = os.environ.get("OPENAI_COMPATIBLE_BASE_URL", "")
+        url = questionary.text(
+            "Enter API base URL (e.g. http://localhost:8080/v1):",
+            default=default_url,
+            validate=lambda x: len(x.strip()) > 0 or "Please enter a valid base URL.",
+        ).ask().strip()
+        if not url:
+            console.print("\n[red]No base URL provided. Exiting...[/red]")
+            exit(1)
+
     return provider, url
 
 
