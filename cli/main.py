@@ -1038,7 +1038,7 @@ def run_analysis_from_args(
     console.print()
     console.print(f"[bold green]Analysis complete in {elapsed:.1f}s[/bold green]")
     console.print(f"[bold]Decision: {decision}[/bold]")
-    console.print(f"Reports saved to: {report_dir}")
+    console.print(f"Reports saved to: {results_dir / 'reports'}")
     console.print()
 
     # Display final report summary
