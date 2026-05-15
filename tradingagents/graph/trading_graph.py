@@ -315,12 +315,25 @@ class TradingAgentsGraph:
 
         if self.debug:
             trace = []
+            # Dedup by message id so a chunk that re-emits accumulated history
+            # doesn't reprint old messages, while still surfacing every NEW
+            # message in the chunk — including all ToolMessages produced by a
+            # parallel tool-call step. Printing only `messages[-1]` (the old
+            # behavior) silently dropped sibling ToolMessages and made
+            # transient failures invisible to the run log.
+            seen_ids: set = set()
             for chunk in self.graph.stream(init_agent_state, **args):
-                if len(chunk["messages"]) == 0:
-                    pass
-                else:
-                    chunk["messages"][-1].pretty_print()
-                    trace.append(chunk)
+                messages = chunk.get("messages") or []
+                if not messages:
+                    continue
+                for message in messages:
+                    msg_id = getattr(message, "id", None)
+                    if msg_id is not None:
+                        if msg_id in seen_ids:
+                            continue
+                        seen_ids.add(msg_id)
+                    message.pretty_print()
+                trace.append(chunk)
             final_state = trace[-1]
         else:
             final_state = self.graph.invoke(init_agent_state, **args)

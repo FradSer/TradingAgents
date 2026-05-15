@@ -1,4 +1,18 @@
-"""yfinance-based news data fetching functions."""
+"""yfinance-based news data fetching functions.
+
+Notes on yfinance's news APIs (as of yfinance 0.2.x):
+- ``Ticker.get_news(count=N)`` returns at most the N most-recent articles for the
+  ticker's news feed. It does NOT accept a date range; callers must filter
+  client-side. In practice the feed only covers roughly the last week.
+- ``yf.Search(query=..., news_count=N)`` is a full-text search whose results
+  occasionally include older articles than the feed surfaces. Useful as a
+  fallback when the feed and the requested window don't overlap.
+
+This module deliberately distinguishes the failure modes when a date-filtered
+query returns nothing — empty feed, window-miss, or unparseable dates — so the
+caller (an LLM) can tell "no data" apart from "wrong window" and avoid
+fabricating articles.
+"""
 
 import yfinance as yf
 from datetime import datetime
@@ -48,6 +62,83 @@ def _extract_article_data(article: dict) -> dict:
         }
 
 
+def _fetch_ticker_feed(ticker: str, count: int = 20) -> list[dict]:
+    """Primary source: the ticker's own news feed (latest-N, no date filter)."""
+    stock = yf.Ticker(ticker)
+    news = yf_retry(lambda: stock.get_news(count=count))
+    return news or []
+
+
+def _fetch_ticker_search(ticker: str, count: int = 20) -> list[dict]:
+    """Fallback source: full-text search keyed on the ticker symbol.
+
+    Sometimes surfaces articles the ticker's own feed has rotated out, and is
+    a useful second look when the feed and the requested window don't overlap.
+    """
+    try:
+        search = yf_retry(lambda: yf.Search(
+            query=ticker,
+            news_count=count,
+            enable_fuzzy_query=False,
+        ))
+        return list(getattr(search, "news", None) or [])
+    except Exception:
+        return []
+
+
+def _filter_to_window(
+    raw_articles: list[dict],
+    start_dt: datetime,
+    end_dt: datetime,
+) -> tuple[list[dict], list[datetime], int]:
+    """Return (articles-in-window, observed-pub-dates, dateless-count).
+
+    Strict filter: an article is included ONLY if its pub_date is parseable
+    AND falls within [start_dt, end_dt + 1 day]. Articles without a parseable
+    pub_date are excluded (counted separately) — we will not let temporally
+    unverifiable items slip through as window matches, especially through the
+    search fallback which often returns dateless results.
+    """
+    in_window: list[dict] = []
+    observed: list[datetime] = []
+    dateless = 0
+    upper = end_dt + relativedelta(days=1)
+    for article in raw_articles:
+        data = _extract_article_data(article)
+        pub = data["pub_date"]
+        if pub is None:
+            dateless += 1
+            continue
+        pub_naive = pub.replace(tzinfo=None)
+        observed.append(pub_naive)
+        if start_dt <= pub_naive <= upper:
+            in_window.append(data)
+    return in_window, observed, dateless
+
+
+def _format_articles(
+    ticker: str,
+    start_date: str,
+    end_date: str,
+    articles: list[dict],
+    source_label: str,
+) -> str:
+    """Render the matched articles as the analyst-facing string."""
+    parts = []
+    for data in articles:
+        parts.append(f"### {data['title']} (source: {data['publisher']})")
+        if data["summary"]:
+            parts.append(data["summary"])
+        if data["link"]:
+            parts.append(f"Link: {data['link']}")
+        parts.append("")
+    body = "\n".join(parts)
+    return (
+        f"## {ticker} News, from {start_date} to {end_date} "
+        f"(via {source_label}, {len(articles)} articles):\n\n{body}"
+    )
+
+
 def get_news_yfinance(
     ticker: str,
     start_date: str,
@@ -56,52 +147,83 @@ def get_news_yfinance(
     """
     Retrieve news for a specific stock ticker using yfinance.
 
-    Args:
-        ticker: Stock ticker symbol (e.g., "AAPL")
-        start_date: Start date in yyyy-mm-dd format
-        end_date: End date in yyyy-mm-dd format
+    Returns one of:
+      * A formatted list of articles that fall within [start_date, end_date].
+      * A ``NO_DATA: ...`` message — yfinance returned nothing at all.
+      * A ``WINDOW_MISS: ...`` message — yfinance returned articles but none in
+        the requested window; the message reports the dates that *were*
+        available and explicitly forbids fabricating coverage.
+      * A ``NO_DATES: ...`` message — articles returned but pub_date was
+        unparseable on all of them.
+      * An ``ERROR: ...`` message — exception bubbled up from yfinance.
 
-    Returns:
-        Formatted string containing news articles
+    The ``NO_DATA`` / ``WINDOW_MISS`` / ``NO_DATES`` prefixes are stable and
+    deliberately machine-readable so analyst prompts can react to them.
     """
     try:
-        stock = yf.Ticker(ticker)
-        news = yf_retry(lambda: stock.get_news(count=20))
-
-        if not news:
-            return f"No news found for {ticker}"
-
-        # Parse date range for filtering
         start_dt = datetime.strptime(start_date, "%Y-%m-%d")
         end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+    except ValueError as e:
+        return f"ERROR: invalid date for {ticker}: {e}"
 
-        news_str = ""
-        filtered_count = 0
+    try:
+        # 1) Primary: ticker's own feed.
+        primary_raw = _fetch_ticker_feed(ticker)
+        primary_articles, primary_dates, primary_dateless = _filter_to_window(
+            primary_raw, start_dt, end_dt
+        )
+        if primary_articles:
+            return _format_articles(
+                ticker, start_date, end_date, primary_articles,
+                source_label="yfinance ticker feed",
+            )
 
-        for article in news:
-            data = _extract_article_data(article)
+        # 2) Fallback: search by ticker symbol.
+        search_raw = _fetch_ticker_search(ticker)
+        search_articles, search_dates, search_dateless = _filter_to_window(
+            search_raw, start_dt, end_dt
+        )
+        if search_articles:
+            return _format_articles(
+                ticker, start_date, end_date, search_articles,
+                source_label="yfinance search fallback",
+            )
 
-            # Filter by date if publish time is available
-            if data["pub_date"]:
-                pub_date_naive = data["pub_date"].replace(tzinfo=None)
-                if not (start_dt <= pub_date_naive <= end_dt + relativedelta(days=1)):
-                    continue
+        # 3) Diagnose why we got nothing.
+        total_returned = len(primary_raw) + len(search_raw)
+        observed_dates = primary_dates + search_dates
+        total_dateless = primary_dateless + search_dateless
 
-            news_str += f"### {data['title']} (source: {data['publisher']})\n"
-            if data["summary"]:
-                news_str += f"{data['summary']}\n"
-            if data["link"]:
-                news_str += f"Link: {data['link']}\n"
-            news_str += "\n"
-            filtered_count += 1
+        if total_returned == 0:
+            return (
+                f"NO_DATA: yfinance returned no articles for {ticker}. The data "
+                f"source may be delayed, rate-limited, or the ticker has no "
+                f"recent news. Do not fabricate articles; report data as "
+                f"unavailable and continue with other sources."
+            )
 
-        if filtered_count == 0:
-            return f"No news found for {ticker} between {start_date} and {end_date}"
+        if observed_dates:
+            oldest = min(observed_dates).date()
+            newest = max(observed_dates).date()
+            return (
+                f"WINDOW_MISS: yfinance returned {total_returned} articles for "
+                f"{ticker} (with parseable pub_dates spanning "
+                f"[{oldest}, {newest}], plus {total_dateless} undated), but "
+                f"none fall inside requested [{start_date}, {end_date}]. "
+                f"yfinance's ticker news feed only surfaces the most-recent "
+                f"~20 articles and does not support historical lookups; "
+                f"re-query a window ending today to see what's available. "
+                f"Do NOT invent news for the requested period."
+            )
 
-        return f"## {ticker} News, from {start_date} to {end_date}:\n\n{news_str}"
+        return (
+            f"NO_DATES: yfinance returned {total_returned} articles for "
+            f"{ticker} but none had parseable pub_date metadata, so window "
+            f"containment cannot be verified. Do not fabricate coverage."
+        )
 
     except Exception as e:
-        return f"Error fetching news for {ticker}: {str(e)}"
+        return f"ERROR: fetching news for {ticker}: {e}"
 
 
 def get_global_news_yfinance(
@@ -157,7 +279,10 @@ def get_global_news_yfinance(
                 break
 
         if not all_news:
-            return f"No global news found for {curr_date}"
+            return (
+                f"NO_DATA: yfinance global news search returned nothing for "
+                f"{curr_date}. Do not fabricate macro coverage."
+            )
 
         # Calculate date range
         curr_dt = datetime.strptime(curr_date, "%Y-%m-%d")
@@ -194,4 +319,4 @@ def get_global_news_yfinance(
         return f"## Global Market News, from {start_date} to {curr_date}:\n\n{news_str}"
 
     except Exception as e:
-        return f"Error fetching global news: {str(e)}"
+        return f"ERROR: fetching global news: {e}"
