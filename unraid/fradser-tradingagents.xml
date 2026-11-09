@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>TradingAgents</Name>
-  <Repository>fradser/tradingagents:v0.2.4-frad</Repository>
+  <Repository>fradser/tradingagents:v0.7.1-frad</Repository>
   <Registry>https://hub.docker.com/r/fradser/tradingagents</Registry>
   <Network>bridge</Network>
   <MyIP/>
@@ -10,51 +10,70 @@
   <Support>https://github.com/TauricResearch/TradingAgents/issues</Support>
   <Project>https://github.com/TauricResearch/TradingAgents</Project>
   <ReadMe/>
-  <Overview>TradingAgents is a multi-agent LLM financial trading framework. It uses specialized AI agents (analysts, traders, portfolio managers, researchers, and risk managers) to collaborate on trading decisions for stocks.&#13;
+  <Overview>TradingAgents v0.7.1 (upstream TauricResearch release).&#13;
 &#13;
-Set at least one LLM API key in the template, then start the container.&#13;
+Image built from the v0.7.1 tag and published to Docker Hub as&#13;
+fradser/tradingagents:v0.7.1-frad and :latest (2026-11-09).&#13;
+Unraid's Update Container works now that the tag is published.&#13;
+Rebuild locally with Home Lab/backups/frad-nas-tradingagents-20261108/build-image.sh.&#13;
 &#13;
-Unraid Container Console:&#13;
-  tradingagents analyze -t NVDA&#13;
-  tradingagents analyze -t NVDA -d 2024-05-10 --depth 3&#13;
-  tradingagents analyze -t NVDA -p openai-compatible --backend-url http://host:8080/v1 --deep-model x --quick-model y&#13;
+The container idles on `sleep infinity`; there is no WebUI. Run analyses with docker exec:&#13;
+  docker exec -it TradingAgents bash&#13;
+  docker exec TradingAgents tradingagents --ticker NVDA --date 2026-11-06 --analysts market,news --save --no-show&#13;
+  docker exec TradingAgents tradingagents backtest NVDA,AAPL --start 2026-01-01 --end 2026-06-30&#13;
 &#13;
-Without --ticker, runs in interactive mode.&#13;
+Headless runs need --ticker, --date, --analysts, --save/--no-save and --show/--no-show; provider,&#13;
+models, language and debate rounds come from the TRADINGAGENTS_* variables below.&#13;
+The v0.2.4 flags --provider, --deep-model, --quick-model, --backend-url, --depth, -l and the&#13;
+`analyze` subcommand no longer exist.&#13;
 &#13;
-Remote Usage (SSH):&#13;
-  ssh -t root@NAS_IP "docker exec TradingAgents tradingagents analyze -t NVDA"&#13;
-  ssh root@NAS_IP "docker exec -d TradingAgents sh -c 'tradingagents analyze -t NVDA &gt; /home/appuser/.tradingagents/logs/NVDA.log 2&gt;&amp;1'"&#13;
-  ssh root@NAS_IP "docker exec TradingAgents tail -f /home/appuser/.tradingagents/logs/NVDA.log"&#13;
-  ssh root@NAS_IP "docker exec TradingAgents cat /home/appuser/.tradingagents/logs/NVDA/$(date +%Y-%m-%d)/reports/final_trade_decision.md"&#13;
+Endpoint name: magpie&#13;
+LLM: Magpie gateway at http://10.10.0.195:3425/v1 through the openai provider&#13;
+with a custom backend URL. Every model tier uses hunyuan-eval/hy4-dev.&#13;
+The generic openai_compatible entry suppresses tool_choice and lets managers&#13;
+fall back to free text (REVIEW ratings), so it is not used here.&#13;
+Section reports: /mnt/user/appdata/tradingagents/logs/&lt;TICKER&gt;/&lt;DATE&gt;/reports/.&#13;
+The combined complete_report.md and complete_report.html go to&#13;
+logs/reports/&lt;TICKER&gt;_&lt;STAMP&gt;/. Decision history: memory/trading_memory.md&#13;
+(435 pre-upgrade entries kept).&#13;
+Cache: cache/ (regenerable).&#13;
 &#13;
-Reports are generated per ticker in /home/appuser/.tradingagents/logs/:&#13;
-  market_report.md, sentiment_report.md, news_report.md, fundamentals_report.md,&#13;
-  investment_plan.md, trader_investment_plan.md, final_trade_decision.md&#13;
-&#13;
-GitHub: https://github.com/TauricResearch/TradingAgents</Overview>
+Upgrade 2026-11-08: v0.2.4-frad fork image to upstream v0.7.1, Python 3.13, valid&#13;
+model IDs, unless-stopped restart policy, json-file log rotation, pids limit.&#13;
+Same day: all model tiers moved to the magpie endpoint (Magpie gateway :3425),&#13;
+model hunyuan-eval/hy4-dev, replacing the CLIProxyAPI gpt-6 pair.&#13;
+Rollback images/templates: backups/frad-nas-tradingagents-20261108/.</Overview>
   <Category>Tools: Finance:</Category>
   <WebUI/>
   <TemplateURL>https://raw.githubusercontent.com/FradSer/TradingAgents/main/unraid/fradser-tradingagents.xml</TemplateURL>
-  <Icon>https://raw.githubusercontent.com/TauricResearch/TradingAgents/main/assets/TauricResearch.png</Icon>
-  <ExtraParams/>
-  <PostArgs>sleep infinity</PostArgs>
+  <Icon>https://ai.tradingagents-ai.com/logo.png</Icon>
+  <ExtraParams>--restart=unless-stopped --entrypoint=/bin/sleep --log-opt max-size=20m --log-opt max-file=3 --pids-limit 512 --security-opt=no-new-privileges:true</ExtraParams>
+  <PostArgs>infinity</PostArgs>
   <CPUset/>
-  <DateInstalled>1745793600</DateInstalled>
+  <DateInstalled>1794108800</DateInstalled>
   <DonateText/>
   <DonateLink/>
   <Requires/>
-  <Config Name="App Data" Target="/home/appuser/.tradingagents" Default="/mnt/user/appdata/tradingagents" Mode="rw" Description="Persistent data directory for TradingAgents cache, logs, and decision history." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/tradingagents</Config>
-  <Config Name="Default LLM Provider" Target="LLM_PROVIDER" Default="openai" Mode="" Description="LLM provider for non-interactive mode. Options: openai, anthropic, google, xai, deepseek, qwen, glm, openrouter, ollama, openai-compatible." Type="Variable" Display="always" Required="false" Mask="false">openai</Config>
-  <Config Name="OpenAI API Key" Target="OPENAI_API_KEY" Default="" Mode="" Description="API key for OpenAI (GPT models). Required if using OpenAI provider." Type="Variable" Display="always" Required="false" Mask="true"/>
-  <Config Name="Anthropic API Key" Target="ANTHROPIC_API_KEY" Default="" Mode="" Description="API key for Anthropic (Claude models). Required if using Anthropic provider." Type="Variable" Display="always" Required="false" Mask="true"/>
-  <Config Name="Google API Key" Target="GOOGLE_API_KEY" Default="" Mode="" Description="API key for Google (Gemini models). Required if using Google provider." Type="Variable" Display="always" Required="false" Mask="true"/>
-  <Config Name="XAI API Key" Target="XAI_API_KEY" Default="" Mode="" Description="API key for xAI (Grok models). Required if using xAI provider." Type="Variable" Display="advanced" Required="false" Mask="true"/>
-  <Config Name="DeepSeek API Key" Target="DEEPSEEK_API_KEY" Default="" Mode="" Description="API key for DeepSeek models. Required if using DeepSeek provider." Type="Variable" Display="advanced" Required="false" Mask="true"/>
-  <Config Name="DashScope API Key" Target="DASHSCOPE_API_KEY" Default="" Mode="" Description="API key for Alibaba DashScope (Qwen models). Required if using Qwen provider." Type="Variable" Display="advanced" Required="false" Mask="true"/>
-  <Config Name="ZhiPu API Key" Target="ZHIPU_API_KEY" Default="" Mode="" Description="API key for ZhiPu AI (GLM models). Required if using GLM provider." Type="Variable" Display="advanced" Required="false" Mask="true"/>
-  <Config Name="OpenRouter API Key" Target="OPENROUTER_API_KEY" Default="" Mode="" Description="API key for OpenRouter (multi-model gateway). Required if using OpenRouter provider." Type="Variable" Display="advanced" Required="false" Mask="true"/>
-  <Config Name="Alpha Vantage API Key" Target="ALPHA_VANTAGE_API_KEY" Default="" Mode="" Description="API key for Alpha Vantage market data. Optional — yfinance is used by default." Type="Variable" Display="advanced" Required="false" Mask="true"/>
-  <Config Name="OpenAI-Compatible Base URL" Target="OPENAI_COMPATIBLE_BASE_URL" Default="" Mode="" Description="Base URL for OpenAI-compatible API (e.g. http://host:8080/v1). Required when provider is openai-compatible." Type="Variable" Display="advanced" Required="false" Mask="false"/>
-  <Config Name="Quick Think Model" Target="QUICK_THINK_MODEL" Default="" Mode="" Description="Model ID for quick-thinking agent (e.g. gpt-4o-mini, qwen-turbo). Used with openai-compatible provider." Type="Variable" Display="advanced" Required="false" Mask="false"/>
-  <Config Name="Deep Think Model" Target="DEEP_THINK_MODEL" Default="" Mode="" Description="Model ID for deep-thinking agent (e.g. gpt-4o, qwen-plus). Used with openai-compatible provider." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="App Data" Target="/home/appuser/.tradingagents" Default="/mnt/user/appdata/tradingagents" Mode="rw" Description="Persistent reports, cache and decision log." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/tradingagents</Config>
+  <Config Name="LLM Provider" Target="TRADINGAGENTS_LLM_PROVIDER" Default="openai" Mode="" Description="Provider ID. openai with a custom backend URL routes the magpie endpoint through the native structured-output path." Type="Variable" Display="always" Required="true" Mask="false">openai</Config>
+  <Config Name="magpie Endpoint Base URL" Target="TRADINGAGENTS_LLM_BACKEND_URL" Default="" Mode="" Description="Endpoint name: magpie. Magpie gateway base URL; must end in /v1." Type="Variable" Display="always" Required="true" Mask="false">http://10.10.0.195:3425/v1</Config>
+  <Config Name="magpie Endpoint API Key" Target="OPENAI_API_KEY" Default="" Mode="" Description="Endpoint name: magpie. sk-dummy is an accepted caller key on this Magpie gateway." Type="Variable" Display="always" Required="true" Mask="true">sk-dummy</Config>
+  <Config Name="Quick Think Model" Target="TRADINGAGENTS_QUICK_THINK_LLM" Default="hunyuan-eval/hy4-dev" Mode="" Description="Model for analysts, researchers and trader on the magpie endpoint." Type="Variable" Display="always" Required="true" Mask="false">hunyuan-eval/hy4-dev</Config>
+  <Config Name="Deep Think Model" Target="TRADINGAGENTS_DEEP_THINK_LLM" Default="hunyuan-eval/hy4-dev" Mode="" Description="Model for managers and risk debate on the magpie endpoint." Type="Variable" Display="always" Required="true" Mask="false">hunyuan-eval/hy4-dev</Config>
+  <Config Name="Output Language" Target="TRADINGAGENTS_OUTPUT_LANGUAGE" Default="English" Mode="" Description="Language of analyst reports and the final decision." Type="Variable" Display="always" Required="true" Mask="false">English</Config>
+  <Config Name="Max Debate Rounds" Target="TRADINGAGENTS_MAX_DEBATE_ROUNDS" Default="1" Mode="" Description="Bull/bear research debate rounds (replaces old --depth)." Type="Variable" Display="advanced" Required="false" Mask="false">1</Config>
+  <Config Name="Max Risk Rounds" Target="TRADINGAGENTS_MAX_RISK_ROUNDS" Default="1" Mode="" Description="Risk discussion rounds (replaces old --depth)." Type="Variable" Display="advanced" Required="false" Mask="false">1</Config>
+  <Config Name="LLM Max Retries" Target="TRADINGAGENTS_LLM_MAX_RETRIES" Default="2" Mode="" Description="SDK retry budget for bursty 429 responses." Type="Variable" Display="advanced" Required="false" Mask="false">3</Config>
+  <Config Name="Disable Update Check" Target="TRADINGAGENTS_NO_UPDATE_CHECK" Default="1" Mode="" Description="Skip the daily release/announcement check on unattended runs." Type="Variable" Display="advanced" Required="false" Mask="false">1</Config>
+  <Config Name="Time Zone" Target="TZ" Default="Asia/Shanghai" Mode="" Description="Container time zone." Type="Variable" Display="advanced" Required="false" Mask="false">Asia/Shanghai</Config>
+  <Config Name="Anthropic API Key" Target="ANTHROPIC_API_KEY" Default="" Mode="" Description="Only needed for the anthropic provider." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="Google API Key" Target="GOOGLE_API_KEY" Default="" Mode="" Description="Only needed for the google provider." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="XAI API Key" Target="XAI_API_KEY" Default="" Mode="" Description="Only needed for the xai provider." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="DeepSeek API Key" Target="DEEPSEEK_API_KEY" Default="" Mode="" Description="Only needed for the deepseek provider." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="DashScope API Key" Target="DASHSCOPE_API_KEY" Default="" Mode="" Description="Only needed for the qwen provider." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="ZhiPu API Key" Target="ZHIPU_API_KEY" Default="" Mode="" Description="Only needed for the glm provider." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="OpenRouter API Key" Target="OPENROUTER_API_KEY" Default="" Mode="" Description="Only needed for the openrouter provider." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="Alpha Vantage API Key" Target="ALPHA_VANTAGE_API_KEY" Default="" Mode="" Description="Optional market-data vendor." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="FRED API Key" Target="FRED_API_KEY" Default="" Mode="" Description="Optional macro-data vendor." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <TailscaleStateDir/>
 </Container>
